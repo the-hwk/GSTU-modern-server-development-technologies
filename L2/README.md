@@ -1,6 +1,5 @@
 **Современные технологии серверной разработки**
 
-<h1 style="color: red">Дорабатывается</h1>
 ## Лабораторная работа №2 (6 ч)
 
 **Тема:** Разработка сетевого приложения на Java с использованием протоколов TCP и UDP.
@@ -49,15 +48,131 @@ TCP и UDP являются базовыми протоколами для н
 
 Размер пула потоков подбирается экспериментально, исходя из числа ядер процессора и характера задач.
 
-Пример использования пула потоков с TCP-сокетом:
+#### Организация структуры сетевого приложения
+Механизм сетевого взаимодействия необходимо внедрять таким образом, чтобы в процессе внедрения Вам не пришлось менять бизнес-логику приложения. Сокеты - это один из способов взаимодействия с Вашим приложением (как, например, и UI), поэтому работу с ними необходимо выделить в отдельный слой. Например:
+
+<p align="center">
+  <img src="./img/СТСервР-L2.png" alt="СТСервР-L2.png" width="50%">
+</p>
+
+Здесь `Networking Layer` - это слой сетевого взаимодействия.
+
+Слой сетевого взаимодействия нужно разделить на следующие классы:
+- класс, который отвечает за создание серверного сокета, его настройку и прослушивание клиентских подключений
+- класс, который отвечает за работу с клиентским подключением
+- класс, который отвечает за обработку данных от клиента и за формирование ответа
+
+Также необходимо создать классы для данных, которые приходят от клиента, и которые сервер отправляет клиенту в качестве ответа (например, `Request`, `Response`), они же - модели данных.
+
+Класс запроса от клиента:
 
 ```Java
-import java.io.*;  
-import java.net.ServerSocket;  
-import java.net.Socket;  
-import java.util.concurrent.ExecutorService;  
-import java.util.concurrent.Executors;  
+public class Request {
+    private final String method;
+    private final String data;
+
+    public Request(String command, String value) {
+        this.method = command;
+        this.data = value;
+    }
+
+    /**
+     * Парсинг запроса от клиента в виде строки и формирование объекта Request
+     * @param string Строка запроса от клиента в виде строки
+     * @return Объект Request
+     * @throws WrongRequestStringException Выбрасывается, если строка
+     * задана не в верном формате
+     */
+    public static Request fromString(String string) throws WrongRequestStringException {
+        String[] parts = string.split(";");
+
+        if (parts.length != 2) {
+            throw new WrongRequestStringException();
+        }
+
+        return new Request(parts[0], parts[1]);
+    }
+
+    @Override
+    public String toString() {
+        return this.method + ";" + this.data;
+    }
+}
+```
+
+Класс ответа от сервера:
+
+```Java
+public class Response {  
+    private final int code;  
+    private final String message;  
   
+    public Response(int code, String message) {  
+        this.code = code;  
+        this.message = message;  
+    }    
+  
+    @Override  
+    public String toString() {  
+        return this.code + ";" + this.message;  
+    }  
+}
+```
+
+Интерфейс контроллера для обработки данных:
+
+```Java 
+public interface INetController {  
+    /**
+     * Обработка запроса от клиента и формирование ответа (в виде строки)
+     * @param data Запрос от клиента (в виде строки)
+     * @return Ответ (результат обработки запроса) (в виде строки)
+     */
+    @Override
+    public String handleRequest(String data);  
+}
+```
+
+Реализация вышеприведенного интерфейса:
+
+```Java
+public class TestController implements INetController {
+    public String handleRequest(String data) {
+        try {
+            // Получаем объект запроса
+            Request request = Request.fromString(data);
+            // И передаем дальше на обработку
+            return handle(request).toString();
+        } catch (WrongRequestStringException e) {
+            // Если формат сообщения неправильный,
+            // то формируем объект-ответ, преобразуем в строку
+            // и возвращаем
+            return new Response(400, "Bad request").toString();
+        }
+    }
+
+    private Response handle(Request request) {
+        Response response;
+
+        switch (request.getMethod()) {
+            case "GET":
+                response = testGetMethod(request);
+            default:
+                response = new Response(405, "Method not allowed");
+        }
+
+        return response;
+    }
+
+    private Response testGetMethod(Request request) {
+        return new Response(200, "GET ok");
+    }
+}
+```
+
+Реализация TCP-сервера:
+
+```Java
 public class TCPServer {  
     private final ServerSocket socket;  
     private final INetController controller;  
@@ -68,11 +183,10 @@ public class TCPServer {
 	 * @param port Номер сетевого порта  
      * @param controller Контроллер для обработки запроса  
      * @throws IOException  
-     */    
-	 public TCPServer(int port, INetController controller) throws IOException {  
+     */    public TCPServer(int port, INetController controller) throws IOException {  
         socket = new ServerSocket(port);  
         // Устанавливаем таймаут ожидания данных на потоке ввода,  
-        // чтобы сервер не "завис" при отсутствии клиентов
+        // чтобы сервер не "завис" при отсутствии клиентов            
 		socket.setSoTimeout(3_000);  
   
         this.controller = controller;  
@@ -102,14 +216,13 @@ public class TCPServer {
     }  
   
     /**  
-     * Класс для работы с клиентом     
-	 */    
+     * Класс для работы с клиентом     */    
 	 private static class ClientHandler implements Runnable {  
         private final Socket socket;  
         private final INetController controller;  
   
         /**  
-         *         
+         *        
 		 * @param socket Клиентский сокет  
          * @param controller Контроллер для обработки запроса  
          */        
@@ -138,16 +251,11 @@ public class TCPServer {
 }
 ```
 
-Обратите внимание, что обработка данных от клиента выполняется отдельным классом, т.е. класс `TCPServer` отвечает только за прием новых подключений и работу с ними, а обработку данных от клиентов делегирует классу, реализующему интерфейс `INetController`, объект которого передается через конструктор.
+Обратите внимание, что каждый класс выполняет только определенную задачу. Например, недопускается в классе, который прослушивает клиентские подключения (в данном случае, `TCPServer`), реализовывать обработку данных от клиента. Класс `TCPServer` должен делегировать эту задачу другому классу, т.к. он отвечает только лишь за создание серверного сокета, его настройку и прослушивание новых подключений.
 
-#### Организация структуры сетевого приложения
-Механизм сетевого взаимодействия необходимо внедрять таким образом, чтобы в процессе внедрения Вам не пришлось менять бизнес-логику приложения. Сокеты - это один из способов взаимодействия с Вашим приложением (как, например, и UI), поэтому работу с ними необходимо выделить в отдельный слой. Например:
+Ниже представлена примерная UML-диаграмма классов, реализующих слой сетевого взаимодействия.
 
-<p align="center">
-  <img src="./img/СТСервР-L2.png" alt="СТСервР-L2.png" width="50%">
-</p>
-
-Здесь `Networking Layer` - это слой сетевого взаимодействия.
+![[./img/СТСерв-L2-UML.png]]
 
 ### Задание
 
