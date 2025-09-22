@@ -255,7 +255,9 @@ public class TCPServer {
 
 Ниже представлена примерная UML-диаграмма классов, реализующих слой сетевого взаимодействия.
 
-![[./img/СТСерв-L2-UML.png]]
+<p align="center">
+  <img src="./img/СТСерв-L2-UML.png" alt="СТСерв-L2-UML.png" width="100%">
+</p>
 
 ### Задание
 
