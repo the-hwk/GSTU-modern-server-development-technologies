@@ -71,9 +71,9 @@ conn.close();  // Connection
 Т.к. приложение должно использовать БД, необходимо создать файл конфигурации для возможности изменения строки подключения к БД без пересборки проекта. В *Java* файлы конфигурации имеют расширение `.properties` и хранятся в папке *resources*, которая находится в папке `src/main`. Пример файла конфигурации:
 
 ```properties
-db_url="jdbc:mysql://localhost:3306/test"
-db_user="root"
-db_pass="some_password"
+db_url=jdbc:mysql://localhost:3306/test
+db_user=root
+db_pass=some_password
 ```
 
 Для чтения файла конфигурации можно создать класс с использованием паттерна "*Singleton*". Пример реализации:
